@@ -3,7 +3,7 @@ import { getIncidents } from '../services/incidentService';
 import { getUnits } from '../services/unitService';
 import { getStations } from '../services/stationService';
 import { useAuth } from '../context/AuthContext';
-import GoogleIncidentMap from '../components/GoogleIncidentMap';
+import LeafletIncidentMap from '../components/LeafletIncidentMap';
 import MapView from '../components/MapView';
 import LoadingSpinner from '../components/LoadingSpinner';
 import SeverityBadge from '../components/SeverityBadge';
@@ -58,7 +58,7 @@ export default function LiveTrackingPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '16px', flex: 1, overflow: 'hidden' }}>
         {/* Map */}
         <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e5e7eb', padding: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-          <GoogleIncidentMap incidents={incidents} units={units} stations={stations} userRole={user?.role} height="100%" />
+          <LeafletIncidentMap incidents={incidents} units={units} stations={stations} userRole={user?.role} height="100%" />
         </div>
 
         {/* Side panel */}

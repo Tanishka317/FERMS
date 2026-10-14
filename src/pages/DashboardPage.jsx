@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import StatCard from '../components/StatCard';
 import SeverityBadge from '../components/SeverityBadge';
 import StatusBadge from '../components/StatusBadge';
-import GoogleIncidentMap from '../components/GoogleIncidentMap';
+import LeafletIncidentMap from '../components/LeafletIncidentMap';
 import MapView from '../components/MapView';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatTime, truncate } from '../utils/helpers';
@@ -138,7 +138,7 @@ export default function DashboardPage() {
             )}
           </div>
           <div style={{ height: '380px' }}>
-            <GoogleIncidentMap incidents={allIncidents} units={units} stations={stations} userRole={user?.role} />
+            <LeafletIncidentMap incidents={allIncidents} units={units} stations={stations} userRole={user?.role} />
           </div>
         </div>
 

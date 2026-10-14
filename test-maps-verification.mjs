@@ -4,12 +4,6 @@ import assert from 'node:assert';
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const BASE_URL = 'http://localhost:5173';
 
-const ROLE_HOME = {
-  Administrator: '/dashboard',
-  Dispatcher: '/dashboard',
-  Analyst: '/dashboard', // we will test Analyst navigating to /dashboard
-};
-
 async function loginAs(page, role, targetPath = '/dashboard') {
   const res = await fetch('http://localhost:5000/api/auth/demo-login', {
     method: 'POST',
@@ -33,7 +27,7 @@ async function loginAs(page, role, targetPath = '/dashboard') {
 }
 
 async function runVerification() {
-  console.log('🗺️  Starting FERMS Google Maps 5-Role/Page Verification in Chrome...\n');
+  console.log('🗺️  Starting FERMS Leaflet + OpenStreetMap 5-Role/Page Verification in Chrome...\n');
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: true,
@@ -49,51 +43,70 @@ async function runVerification() {
     // 1. Administrator Dashboard
     console.log('1. Checking Administrator Dashboard (/dashboard)...');
     await loginAs(page, 'Administrator', '/dashboard');
+    await page.waitForSelector('.leaflet-container', { timeout: 8000 });
+
     let text = await page.evaluate(() => document.body.innerText);
     assert(text.includes('Live Incident Map'), 'Should render Live Incident Map heading');
     assert(text.includes('Active Incidents'), 'Should render Active Incidents panel');
     assert(text.includes('View Full →'), 'Admin should have View Full link');
     assert(text.includes('Triage'), 'Admin should have Triage button');
     assert(text.includes('Dispatch Unit'), 'Admin should have Dispatch Unit button');
-    console.log('  ✅ [PASS] Administrator Dashboard verified');
+    assert(text.includes('OpenStreetMap'), 'Should display OpenStreetMap attribution');
+
+    const adminMarkersCount = await page.evaluate(() => document.querySelectorAll('.leaflet-marker-icon').length);
+    assert(adminMarkersCount > 0, `Should render Leaflet markers, found ${adminMarkersCount}`);
+    console.log(`  ✅ [PASS] Administrator Dashboard verified (${adminMarkersCount} Leaflet markers rendered)`);
     passed++;
 
     // 2. Administrator Live Tracking
     console.log('2. Checking Administrator Live Tracking (/live-tracking)...');
     await page.goto(`${BASE_URL}/live-tracking`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('.leaflet-container', { timeout: 8000 });
+
     text = await page.evaluate(() => document.body.innerText);
     assert(text.includes('Live Incident Tracking'), 'Should render Live Incident Tracking');
     assert(text.includes('Active Incidents'), 'Should render Active Incidents panel');
     assert(text.includes('Unit Status'), 'Should render Unit Status');
+    assert(text.includes('OpenStreetMap'), 'Should display OpenStreetMap attribution');
     console.log('  ✅ [PASS] Administrator Live Tracking verified');
     passed++;
 
     // 3. Dispatcher Dashboard
     console.log('3. Checking Dispatcher Dashboard (/dashboard)...');
     await loginAs(page, 'Dispatcher', '/dashboard');
+    await page.waitForSelector('.leaflet-container', { timeout: 8000 });
+
     text = await page.evaluate(() => document.body.innerText);
     assert(text.includes('Live Incident Map'), 'Should render Live Incident Map');
     assert(text.includes('View Full →'), 'Dispatcher should have View Full link');
     assert(text.includes('Triage'), 'Dispatcher should have Triage button');
     assert(text.includes('Dispatch Unit'), 'Dispatcher should have Dispatch Unit button');
+    assert(text.includes('OpenStreetMap'), 'Should display OpenStreetMap attribution');
     console.log('  ✅ [PASS] Dispatcher Dashboard verified');
     passed++;
 
     // 4. Dispatcher Live Tracking
     console.log('4. Checking Dispatcher Live Tracking (/live-tracking)...');
     await page.goto(`${BASE_URL}/live-tracking`, { waitUntil: 'networkidle0' });
+    await page.waitForSelector('.leaflet-container', { timeout: 8000 });
+
     text = await page.evaluate(() => document.body.innerText);
     assert(text.includes('Live Incident Tracking'), 'Should render Live Incident Tracking');
     assert(text.includes('Unit Status'), 'Should render Unit Status');
+    assert(text.includes('OpenStreetMap'), 'Should display OpenStreetMap attribution');
     console.log('  ✅ [PASS] Dispatcher Live Tracking verified');
     passed++;
 
     // 5. Analyst Dashboard
     console.log('5. Checking Analyst Dashboard (/dashboard)...');
     await loginAs(page, 'Analyst', '/dashboard');
+    await page.waitForSelector('.leaflet-container', { timeout: 8000 });
+
     text = await page.evaluate(() => document.body.innerText);
     assert(text.includes('Live Incident Map'), 'Analyst should see Live Incident Map');
+    assert(text.includes('OpenStreetMap'), 'Analyst should see OpenStreetMap attribution');
     assert(!text.includes('View Full →'), 'Analyst should NOT see View Full link to Live Tracking');
+
     // Verify Triage and Dispatch buttons are hidden from Analyst
     const hasTriage = await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('button'));
@@ -116,8 +129,26 @@ async function runVerification() {
     console.log('  ✅ [PASS] Analyst strictly prevented from accessing /live-tracking (redirected to ' + currentUrl + ')');
     passed++;
 
+    // 7. Leaflet Popup & Interaction Check
+    console.log('7. Checking Leaflet marker popup interactions...');
+    await loginAs(page, 'Dispatcher', '/dashboard');
+    await page.waitForSelector('.leaflet-marker-icon', { timeout: 8000 });
+    // Click on the first marker to trigger popup
+    await page.evaluate(() => {
+      const marker = document.querySelector('.leaflet-marker-icon');
+      if (marker) marker.click();
+    });
+    await page.waitForSelector('.leaflet-popup-content', { timeout: 5000 });
+    const popupText = await page.evaluate(() => {
+      const popup = document.querySelector('.leaflet-popup-content');
+      return popup ? popup.innerText : '';
+    });
+    assert(popupText.length > 0, 'Popup should render content upon clicking marker');
+    console.log('  ✅ [PASS] Leaflet Marker popup interaction verified');
+    passed++;
+
     console.log(`\n==============================================`);
-    console.log(`🎉 ALL ${passed}/6 MAP & RBAC VERIFICATIONS PASSED!`);
+    console.log(`🎉 ALL ${passed}/7 LEAFLET + OPENSTREETMAP VERIFICATIONS PASSED!`);
     console.log(`==============================================\n`);
   } finally {
     await browser.close();
