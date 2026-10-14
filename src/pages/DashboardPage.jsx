@@ -5,14 +5,17 @@ import { getIncidents, getIncidentStats } from '../services/incidentService';
 import { getUnitStats } from '../services/unitService';
 import { getUnits } from '../services/unitService';
 import { getStations } from '../services/stationService';
+import { useAuth } from '../context/AuthContext';
 import StatCard from '../components/StatCard';
 import SeverityBadge from '../components/SeverityBadge';
 import StatusBadge from '../components/StatusBadge';
+import GoogleIncidentMap from '../components/GoogleIncidentMap';
 import MapView from '../components/MapView';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatTime, truncate } from '../utils/helpers';
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [incidentStats, setIncidentStats] = useState(null);
   const [unitStats, setUnitStats] = useState(null);
@@ -57,20 +60,22 @@ export default function DashboardPage() {
           <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#111827' }}>Emergency Operations Dashboard</h2>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6b7280' }}>Real-time monitoring and dispatch coordination — Mumbai Region</p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={() => navigate('/incidents/triage')}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', background: '#fff', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}
-          >
-            <Activity size={15} /> Triage
-          </button>
-          <button
-            onClick={() => navigate('/dispatch')}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', background: '#dc2626', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', color: '#fff' }}
-          >
-            <Zap size={15} /> Dispatch Unit
-          </button>
-        </div>
+        {user?.role !== 'Analyst' && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => navigate('/incidents/triage')}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', background: '#fff', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', color: '#374151' }}
+            >
+              <Activity size={15} /> Triage
+            </button>
+            <button
+              onClick={() => navigate('/dispatch')}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', background: '#dc2626', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', color: '#fff' }}
+            >
+              <Zap size={15} /> Dispatch Unit
+            </button>
+          </div>
+        )}
       </div>
 
       {/* KPI Cards */}
@@ -128,10 +133,12 @@ export default function DashboardPage() {
         <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #e5e7eb', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#111827' }}>Live Incident Map</h3>
-            <button onClick={() => navigate('/live-tracking')} style={{ fontSize: '12px', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>View Full →</button>
+            {user?.role !== 'Analyst' && (
+              <button onClick={() => navigate('/live-tracking')} style={{ fontSize: '12px', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>View Full →</button>
+            )}
           </div>
           <div style={{ height: '380px' }}>
-            <MapView incidents={allIncidents} units={units} stations={stations} />
+            <GoogleIncidentMap incidents={allIncidents} units={units} stations={stations} userRole={user?.role} />
           </div>
         </div>
 
