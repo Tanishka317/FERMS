@@ -1,0 +1,154 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String             @id
+  name         String
+  email        String             @unique
+  passwordHash String
+  phone        String?
+  role         String             // Administrator, Dispatcher, Field Officer, Citizen, Analyst
+  status       String             @default("Active") // Active, Inactive
+  station      String?
+  assignedUnit String?
+  lastActive   DateTime?
+  avatar       String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  reportedIncidents Incident[]    @relation("ReporterUser")
+  activities        IncidentActivity[]
+  dispatches        Dispatch[]    @relation("DispatcherUser")
+  notifications     Notification[]
+}
+
+model FireStation {
+  id              String     @id // STN-001, etc.
+  name            String
+  location        String?
+  address         String
+  latitude        Float
+  longitude       Float
+  phone           String
+  status          String     @default("Operational")
+  totalUnits      Int        @default(0)
+  availableUnits  Int        @default(0)
+  totalPersonnel  Int        @default(0)
+  activePersonnel Int        @default(0)
+  commandOfficer  String?
+  established     String?
+  coverageArea    String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  units           FireUnit[]
+}
+
+model FireUnit {
+  id                String      @id // FT-01, etc.
+  stationId         String
+  station           FireStation @relation(fields: [stationId], references: [id])
+  type              String      // Fire Engine, Ladder Truck, Rescue Van, Ambulance, Hazmat Unit, Water Tanker
+  status            String      @default("Available") // Available, Dispatched, En Route, On-Site, Returning, Maintenance, Unavailable
+  currentLocation   String?
+  latitude          Float
+  longitude         Float
+  crew              Int         @default(0)
+  crewNames         String?     // JSON serialized array of strings
+  currentIncidentId String?
+  currentIncident   Incident?   @relation("UnitCurrentIncident", fields: [currentIncidentId], references: [id])
+  eta               String?
+  vehicleNo         String?
+  capacity          String?
+  lastService       String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  dispatches        Dispatch[]
+}
+
+model Incident {
+  id             String             @id // INC-2026-0047, etc.
+  type           String
+  location       String
+  address        String?
+  latitude       Float?
+  longitude      Float?
+  severity       String             // Low, Medium, High, Critical
+  description    String
+  reporter       String
+  reporterPhone  String?
+  reporterId     String?
+  reporterUser   User?              @relation("ReporterUser", fields: [reporterId], references: [id])
+  reportedAt     DateTime           @default(now())
+  status         String             @default("Reported") // Reported, Verified, Dispatched, En Route, On-Site, Contained, Resolved, Archived
+  assignedUnits  String?            // JSON serialized array of unit IDs e.g. ["FT-02", "FT-05"]
+  dispatchTime   DateTime?
+  eta            String?
+  arrivalTime    DateTime?
+  resolutionTime DateTime?
+  responseTime   String?
+  outcome        String?
+  affectedPeople Int                @default(0)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  activityLog    IncidentActivity[]
+  dispatches     Dispatch[]
+  activeUnits    FireUnit[]         @relation("UnitCurrentIncident")
+}
+
+model IncidentActivity {
+  id             String   @id @default(cuid())
+  incidentId     String
+  incident       Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  time           DateTime @default(now())
+  action         String
+  type           String   @default("update") // report, verify, dispatch, arrive, update, contain, resolve, archive
+  previousStatus String?
+  newStatus      String?
+  description    String?
+  createdAt      DateTime @default(now())
+}
+
+model Dispatch {
+  id               String      @id @default(cuid())
+  incidentId       String
+  incident         Incident    @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  unitId           String
+  unit             FireUnit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  dispatchedBy     String?
+  dispatcher       User?       @relation("DispatcherUser", fields: [dispatchedBy], references: [id])
+  estimatedArrival String?
+  dispatchedAt     DateTime    @default(now())
+  arrivedAt        DateTime?
+  completedAt      DateTime?
+  status           String      @default("Active") // Active, Completed, Cancelled
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model Notification {
+  id           String   @id // NOTIF-001 or generated
+  type         String   // Critical, Dispatch, Escalation, Status Update, System
+  title        String
+  message      String
+  incidentId   String?
+  timestamp    DateTime @default(now())
+  read         Boolean  @default(false)
+  priority     String   @default("medium") // low, medium, high, critical
+  targetRoles  String?  // JSON serialized array e.g. ["Dispatcher", "Administrator"]
+  targetUserId String?
+  targetUser   User?    @relation(fields: [targetUserId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
