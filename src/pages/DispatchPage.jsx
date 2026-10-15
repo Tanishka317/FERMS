@@ -10,6 +10,7 @@ import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
 import { formatTime, getDistanceKm } from '../utils/helpers';
+import { notifyDataSync } from '../utils/syncEvents';
 
 export default function DispatchPage() {
   const navigate = useNavigate();
@@ -77,6 +78,7 @@ export default function DispatchPage() {
       });
 
       addToast(`${selectedUnitIds.length} unit(s) dispatched successfully to ${selectedIncidentId}`, 'success');
+      notifyDataSync({ type: 'DISPATCH_COMPLETED', incidentId: selectedIncidentId });
       setSelectedUnitIds([]);
       setAvailableUnits(prev => prev.filter(u => !selectedUnitIds.includes(u.id)));
       setTimeout(() => navigate(`/incidents/${selectedIncidentId}`), 1500);

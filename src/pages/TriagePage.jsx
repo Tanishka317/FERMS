@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getIncidents, updateIncidentStatus } from '../services/incidentService';
 import { useToast } from '../context/ToastContext';
+import { notifyDataSync, subscribeDataSync } from '../utils/syncEvents';
 import SeverityBadge from '../components/SeverityBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
 import EmptyState from '../components/EmptyState';
@@ -14,13 +15,45 @@ export default function TriagePage() {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState({});
+  const isFetchingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  const fetchTriage = useCallback(async (isSilent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    try {
+      const data = await getIncidents({ status: 'Reported' });
+      if (isMountedRef.current) {
+        setIncidents(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch triage queue:', err);
+    } finally {
+      isFetchingRef.current = false;
+      if (!isSilent && isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    getIncidents({ status: 'Reported' }).then(data => {
-      setIncidents(data);
-      setLoading(false);
+    isMountedRef.current = true;
+    fetchTriage(false);
+
+    const intervalId = setInterval(() => {
+      fetchTriage(true);
+    }, 5000);
+
+    const unsubscribe = subscribeDataSync(() => {
+      fetchTriage(true);
     });
-  }, []);
+
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(intervalId);
+      unsubscribe();
+    };
+  }, [fetchTriage]);
 
   async function handleAction(id, action, severity) {
     setActionLoading(prev => ({ ...prev, [id]: action }));
@@ -28,16 +61,22 @@ export default function TriagePage() {
       if (action === 'Verify') {
         await updateIncidentStatus(id, 'Verified', 'Incident verified by dispatcher');
         setIncidents(prev => prev.filter(i => i.id !== id));
+        notifyDataSync({ type: 'INCIDENT_VERIFIED', id, status: 'Verified' });
         addToast(`Incident ${id} verified successfully`, 'success');
       } else if (action === 'Reject') {
+        await updateIncidentStatus(id, 'Archived', 'Incident rejected during triage');
         setIncidents(prev => prev.filter(i => i.id !== id));
+        notifyDataSync({ type: 'INCIDENT_REJECTED', id, status: 'Archived' });
         addToast(`Incident ${id} rejected`, 'info');
       } else if (action === 'Duplicate') {
+        await updateIncidentStatus(id, 'Archived', 'Incident marked duplicate during triage');
         setIncidents(prev => prev.filter(i => i.id !== id));
+        notifyDataSync({ type: 'INCIDENT_DUPLICATE', id, status: 'Archived' });
         addToast(`Incident ${id} marked as duplicate`, 'warning');
       } else if (action === 'Escalate') {
         await updateIncidentStatus(id, 'Verified', 'Escalated to high priority by dispatcher');
         setIncidents(prev => prev.filter(i => i.id !== id));
+        notifyDataSync({ type: 'INCIDENT_VERIFIED', id, status: 'Verified' });
         addToast(`Incident ${id} escalated`, 'warning');
       }
     } catch (err) {

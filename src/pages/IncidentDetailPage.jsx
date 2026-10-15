@@ -10,6 +10,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatTime, INCIDENT_STATUSES, getNextStatus } from '../utils/helpers';
+import { notifyDataSync } from '../utils/syncEvents';
 
 export default function IncidentDetailPage() {
   const { id } = useParams();
@@ -43,6 +44,7 @@ export default function IncidentDetailPage() {
         priority: newStatus === 'Resolved' ? 'medium' : 'low',
         targetRoles: ['Dispatcher', 'Administrator', 'Analyst'],
       });
+      notifyDataSync({ type: 'INCIDENT_STATUS_UPDATED', id, status: newStatus });
       addToast(`Status updated to "${newStatus}"`, 'success');
     } catch (err) {
       addToast('Failed to update status', 'error');

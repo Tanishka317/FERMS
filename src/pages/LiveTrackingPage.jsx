@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { getIncidents } from '../services/incidentService';
 import { getUnits } from '../services/unitService';
 import { getStations } from '../services/stationService';
 import { useAuth } from '../context/AuthContext';
+import { subscribeDataSync } from '../utils/syncEvents';
 import LeafletIncidentMap from '../components/LeafletIncidentMap';
 import MapView from '../components/MapView';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -19,19 +20,62 @@ export default function LiveTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
+  const isFetchingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
-  async function loadData() {
-    setRefreshing(true);
-    const [inc, u, s] = await Promise.all([getIncidents(), getUnits(), getStations()]);
-    setIncidents(inc);
-    setUnits(u);
-    setStations(s);
-    setLastRefresh(new Date());
-    setLoading(false);
-    setRefreshing(false);
-  }
+  const loadData = useCallback(async (isSilent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (!isSilent) setRefreshing(true);
 
-  useEffect(() => { loadData(); }, []);
+    try {
+      const [inc, u, s] = await Promise.all([getIncidents(), getUnits(), getStations()]);
+      if (!isMountedRef.current) return;
+      setIncidents(inc);
+      setUnits(u);
+      setStations(s);
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error('Failed to refresh live tracking data:', err);
+    } finally {
+      isFetchingRef.current = false;
+      if (isMountedRef.current) {
+        setLoading(false);
+        if (!isSilent) setRefreshing(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    // Initial fetch
+    loadData(false);
+
+    // 1. Silent automatic polling every 5 seconds
+    const intervalId = setInterval(() => {
+      loadData(true);
+    }, 5000);
+
+    // 2. Immediate silent refresh on tab/window visibility
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadData(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Reactive cross-tab and cross-component sync
+    const unsubscribeSync = subscribeDataSync(() => {
+      loadData(true);
+    });
+
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribeSync();
+    };
+  }, [loadData]);
 
   const activeIncidents = incidents.filter(i => !['Resolved', 'Archived'].includes(i.status));
 

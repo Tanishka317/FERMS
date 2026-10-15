@@ -25,3 +25,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+# Local SQLite database and backups
+backend/prisma/dev.db
+backend/prisma/dev.db-journal
+backend/prisma/dev.db-wal
+backend/prisma/dev.db-shm
+backend/prisma/*.db.backup*

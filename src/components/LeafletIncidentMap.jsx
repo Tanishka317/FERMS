@@ -37,10 +37,10 @@ function isValidCoord(lat, lng) {
 /**
  * Create custom SVG-based Leaflet DivIcons to avoid asset-loading issues.
  */
-function createIncidentIcon(severity) {
+function createIncidentIcon(severity, incidentId = '') {
   const color = SEVERITY_COLORS[severity] || '#6b7280';
   const html = `
-    <div style="position:relative; width:30px; height:42px; display:flex; align-items:flex-start; justify-content:center;">
+    <div data-incident-id="${incidentId}" style="position:relative; width:30px; height:42px; display:flex; align-items:flex-start; justify-content:center;">
       <svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42">
         <defs>
           <filter id="pin-shadow" x="-20%" y="-20%" width="140%" height="140%">
@@ -55,7 +55,7 @@ function createIncidentIcon(severity) {
   `;
   return L.divIcon({
     html,
-    className: 'ferms-incident-marker',
+    className: `ferms-incident-marker ferms-marker-${incidentId}`,
     iconSize: [30, 42],
     iconAnchor: [15, 41],
     popupAnchor: [0, -38],
@@ -119,14 +119,17 @@ export default function LeafletIncidentMap({
 }) {
   const navigate = useNavigate();
 
+  // Only verified active incidents are eligible for the map (Reported is unverified and pending triage)
+  const isMapEligible = (status) => !['Reported', 'Resolved', 'Archived'].includes(status);
+
   // Validate coordinates without fabricating missing data
   const validIncidents = useMemo(
-    () => incidents.filter(i => !['Resolved', 'Archived'].includes(i.status) && isValidCoord(i.latitude, i.longitude)),
+    () => incidents.filter(i => isMapEligible(i.status) && isValidCoord(i.latitude, i.longitude)),
     [incidents]
   );
 
   const unmappedIncidents = useMemo(
-    () => incidents.filter(i => !['Resolved', 'Archived'].includes(i.status) && !isValidCoord(i.latitude, i.longitude)),
+    () => incidents.filter(i => isMapEligible(i.status) && !isValidCoord(i.latitude, i.longitude)),
     [incidents]
   );
 
@@ -140,15 +143,17 @@ export default function LeafletIncidentMap({
     [units]
   );
 
-  // Compute center if valid coordinates exist, otherwise fallback to Mumbai default
-  const center = useMemo(() => {
-    if (validIncidents.length > 0) {
-      const avgLat = validIncidents.reduce((sum, i) => sum + Number(i.latitude), 0) / validIncidents.length;
-      const avgLng = validIncidents.reduce((sum, i) => sum + Number(i.longitude), 0) / validIncidents.length;
+  // Compute initial center once to preserve the map view and zoom during background polling data refreshes
+  const initialMapCenter = useMemo(() => {
+    const withCoords = incidents.filter(i => isMapEligible(i.status) && isValidCoord(i.latitude, i.longitude));
+    if (withCoords.length > 0) {
+      const avgLat = withCoords.reduce((sum, i) => sum + Number(i.latitude), 0) / withCoords.length;
+      const avgLng = withCoords.reduce((sum, i) => sum + Number(i.longitude), 0) / withCoords.length;
       return [avgLat, avgLng];
     }
     return initialCenter;
-  }, [validIncidents, initialCenter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Empty state if literally no valid coordinates are available across any entity
   if (validIncidents.length === 0 && validStations.length === 0 && validUnits.length === 0) {
@@ -192,7 +197,7 @@ export default function LeafletIncidentMap({
       }}
     >
       <MapContainer
-        center={center}
+        center={initialMapCenter}
         zoom={initialZoom}
         scrollWheelZoom={true}
         style={{ width: '100%', height: '100%', minHeight: '380px' }}
@@ -298,7 +303,7 @@ export default function LeafletIncidentMap({
           <Marker
             key={`inc-${incident.id}`}
             position={[Number(incident.latitude), Number(incident.longitude)]}
-            icon={createIncidentIcon(incident.severity)}
+            icon={createIncidentIcon(incident.severity, incident.id)}
           >
             <Popup>
               <div style={{ maxWidth: '260px', padding: '4px', color: '#111827', fontFamily: 'inherit' }}>
@@ -306,7 +311,10 @@ export default function LeafletIncidentMap({
                   <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280' }}>
                     {incident.id}
                   </span>
-                  <SeverityBadge severity={incident.severity} />
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <StatusBadge status={incident.status} />
+                    <SeverityBadge severity={incident.severity} />
+                  </div>
                 </div>
 
                 <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '4px', color: '#111827' }}>

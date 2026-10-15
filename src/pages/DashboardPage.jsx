@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Truck, Clock, Activity, CheckCircle, TrendingUp, Zap, Plus } from 'lucide-react';
 import { getIncidents, getIncidentStats } from '../services/incidentService';
@@ -6,6 +6,7 @@ import { getUnitStats } from '../services/unitService';
 import { getUnits } from '../services/unitService';
 import { getStations } from '../services/stationService';
 import { useAuth } from '../context/AuthContext';
+import { subscribeDataSync } from '../utils/syncEvents';
 import StatCard from '../components/StatCard';
 import SeverityBadge from '../components/SeverityBadge';
 import StatusBadge from '../components/StatusBadge';
@@ -24,31 +25,67 @@ export default function DashboardPage() {
   const [units, setUnits] = useState([]);
   const [stations, setStations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const isFetchingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [iStats, uStats, incidents, allUnits, allStations] = await Promise.all([
-          getIncidentStats(),
-          getUnitStats(),
-          getIncidents(),
-          getUnits(),
-          getStations(),
-        ]);
-        setIncidentStats(iStats);
-        setUnitStats(uStats);
-        setRecentIncidents(incidents.filter(i => !['Resolved', 'Archived'].includes(i.status)).slice(0, 8));
-        setAllIncidents(incidents);
-        setUnits(allUnits);
-        setStations(allStations);
-      } catch (err) {
-        console.error(err);
-      } finally {
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    try {
+      const [iStats, uStats, incidents, allUnits, allStations] = await Promise.all([
+        getIncidentStats(),
+        getUnitStats(),
+        getIncidents(),
+        getUnits(),
+        getStations(),
+      ]);
+      if (!isMountedRef.current) return;
+      setIncidentStats(iStats);
+      setUnitStats(uStats);
+      setRecentIncidents(incidents.filter(i => !['Resolved', 'Archived'].includes(i.status)).slice(0, 8));
+      setAllIncidents(incidents);
+      setUnits(allUnits);
+      setStations(allStations);
+    } catch (err) {
+      console.error('Failed to refresh dashboard data:', err);
+    } finally {
+      isFetchingRef.current = false;
+      if (!isSilent && isMountedRef.current) {
         setLoading(false);
       }
     }
-    loadData();
   }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    // Initial load
+    fetchData(false);
+
+    // 1. Silent automatic polling every 5 seconds
+    const intervalId = setInterval(() => {
+      fetchData(true);
+    }, 5000);
+
+    // 2. Immediate silent refresh on tab/window visibility
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchData(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 3. Reactive cross-tab and cross-component sync
+    const unsubscribeSync = subscribeDataSync(() => {
+      fetchData(true);
+    });
+
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      unsubscribeSync();
+    };
+  }, [fetchData]);
 
   if (loading) return <LoadingSpinner message="Loading dashboard…" fullPage />;
 

@@ -5,6 +5,7 @@ import { createIncident } from '../services/incidentService';
 import { addNotification } from '../services/notificationService';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
+import { notifyDataSync } from '../utils/syncEvents';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatDate } from '../utils/helpers';
 
@@ -99,6 +100,7 @@ export default function ReportIncidentPage() {
       });
 
       setSubmitted(incident);
+      notifyDataSync({ type: 'INCIDENT_CREATED', id: incident.id });
     } catch (err) {
       addToast('Failed to submit incident report. Please try again.', 'error');
     } finally {
