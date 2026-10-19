@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getAnalytics } from '../services/analyticsService';
+import { getAnalytics, exportReport } from '../services/analyticsService';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useToast } from '../context/ToastContext';
-import { Download, FileText, BarChart2 } from 'lucide-react';
+import { Download, FileText, BarChart2, AlertCircle, RefreshCw } from 'lucide-react';
 
 const DATE_RANGES = [
   { label: 'Today', value: 'today' },
@@ -16,25 +16,87 @@ export default function AnalyticsPage() {
   const { addToast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [range, setRange] = useState('7d');
-  const [exporting, setExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState(null);
+
+  const fetchAnalytics = useCallback((selectedRange) => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getAnalytics(selectedRange)
+      .then((d) => {
+        if (!cancelled) {
+          setData(d);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message || 'Failed to retrieve analytics data from backend.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    setLoading(true);
-    getAnalytics(range).then(d => { setData(d); setLoading(false); });
-  }, [range]);
+    const cleanup = fetchAnalytics(range);
+    return cleanup;
+  }, [range, fetchAnalytics]);
 
   async function handleExport(format) {
-    setExporting(true);
-    await new Promise(r => setTimeout(r, 1200));
-    // TODO: Replace with actual file download from backend
-    addToast(`Report exported as ${format.toUpperCase()} successfully.`, 'success');
-    setExporting(false);
+    setExportingFormat(format);
+    try {
+      const res = await exportReport(format, { range });
+      if (res.success) {
+        addToast(res.message || `Report exported as ${format.toUpperCase()} successfully.`, 'success');
+      } else {
+        addToast(res.message || `Failed to export ${format.toUpperCase()}`, 'error');
+      }
+    } catch (err) {
+      addToast(err.message || `Failed to export ${format.toUpperCase()}`, 'error');
+    } finally {
+      setExportingFormat(null);
+    }
   }
 
   if (loading) return <LoadingSpinner message="Loading analytics…" fullPage />;
 
-  const { summary, incidentsPerDay, incidentsBySeverity, incidentsByRegion, avgResponseTimeByRegion, unitUtilization, resolutionTimeByType, monthlyTrend } = data;
+  if (error) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '40px auto', background: '#fff', borderRadius: '12px', border: '1px solid #fee2e2', padding: '32px', textAlign: 'center' }}>
+        <AlertCircle size={44} color="#dc2626" style={{ marginBottom: '12px' }} />
+        <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, color: '#111827' }}>Analytics Error</h3>
+        <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#6b7280' }}>{error}</p>
+        <button
+          onClick={() => fetchAnalytics(range)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+        >
+          <RefreshCw size={14} /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!data || !data.summary) {
+    return <LoadingSpinner message="No analytics data available…" fullPage />;
+  }
+
+  const {
+    summary = {},
+    incidentsPerDay = [],
+    incidentsBySeverity = [],
+    incidentsByRegion = [],
+    avgResponseTimeByRegion = [],
+    unitUtilization = [],
+    resolutionTimeByType = [],
+    monthlyTrend = [],
+  } = data;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '32px' }}>
@@ -61,18 +123,20 @@ export default function AnalyticsPage() {
             </button>
           ))}
           <button
+            id="btn-export-csv"
             onClick={() => handleExport('csv')}
-            disabled={exporting}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '12px', fontWeight: 600, cursor: exporting ? 'not-allowed' : 'pointer', color: '#374151' }}
+            disabled={Boolean(exportingFormat)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: '7px', fontSize: '12px', fontWeight: 600, cursor: exportingFormat ? 'not-allowed' : 'pointer', color: '#374151' }}
           >
-            <Download size={14} /> {exporting ? 'Exporting…' : 'Export CSV'}
+            <Download size={14} /> {exportingFormat === 'csv' ? 'Exporting CSV…' : 'Export CSV'}
           </button>
           <button
+            id="btn-export-pdf"
             onClick={() => handleExport('pdf')}
-            disabled={exporting}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: '#1d4ed8', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: exporting ? 'not-allowed' : 'pointer', color: '#fff' }}
+            disabled={Boolean(exportingFormat)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: '#1d4ed8', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: exportingFormat ? 'not-allowed' : 'pointer', color: '#fff', opacity: exportingFormat ? 0.8 : 1 }}
           >
-            <FileText size={14} /> Download PDF
+            <FileText size={14} /> {exportingFormat === 'pdf' ? 'Generating PDF…' : 'Download PDF'}
           </button>
         </div>
       </div>

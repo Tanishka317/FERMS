@@ -16,7 +16,9 @@ import { requireRole } from '../middleware/roleMiddleware.js';
 
 const router = Router();
 
+// Reading analytics metrics restricted to authorized staff
 router.use(authenticateToken);
+router.use(requireRole('Administrator', 'Analyst', 'Dispatcher'));
 
 router.get('/', completeAnalytics);
 router.get('/summary', summary);
@@ -28,8 +30,8 @@ router.get('/unit-utilization', unitUtilization);
 router.get('/resolution-time', resolutionTime);
 router.get('/monthly-trend', monthlyTrend);
 
-// Export report
-router.get('/export', exportReport);
-router.post('/export', exportReport);
+// Exporting reports restricted to Administrator and Analyst
+router.get('/export', requireRole('Administrator', 'Analyst'), exportReport);
+router.post('/export', requireRole('Administrator', 'Analyst'), exportReport);
 
 export default router;

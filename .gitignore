@@ -33,3 +33,4 @@ backend/prisma/dev.db-journal
 backend/prisma/dev.db-wal
 backend/prisma/dev.db-shm
 backend/prisma/*.db.backup*
+backend/prisma/backups/

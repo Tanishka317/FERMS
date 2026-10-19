@@ -23,8 +23,13 @@ async function run() {
     NODE_ENV: 'test',
   };
 
+  const testsDir = path.resolve('tests');
+  const testFiles = fs.readdirSync(testsDir)
+    .filter(f => f.endsWith('.test.js'))
+    .map(f => path.join('tests', f));
+
   console.log('🚀 Running tests against isolated test database...');
-  const child = spawn('node', ['--test', 'tests/**/*.test.js'], {
+  const child = spawn('node', ['--test', '--test-concurrency=1', ...testFiles], {
     env,
     stdio: 'inherit',
     shell: true,

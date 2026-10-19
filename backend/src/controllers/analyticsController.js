@@ -95,15 +95,17 @@ export async function completeAnalytics(req, res, next) {
 
 export async function exportReport(req, res, next) {
   try {
-    const format = (req.query.format || req.body.format || 'csv').toLowerCase();
+    const format = (req.query.format || req.body?.format || 'csv').toLowerCase();
+    const range = req.query.range || req.body?.range || '7d';
 
     if (format === 'pdf') {
-      return generatePdfReportStream(res);
+      return generatePdfReportStream(res, range, req.user);
     }
 
-    const csvContent = await generateCsvReport();
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="FERMS_Incident_Report.csv"');
+    const csvContent = await generateCsvReport(range);
+    const dateStr = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="FERMS_Incident_Report_${range}_${dateStr}.csv"`);
     res.send(csvContent);
   } catch (err) {
     next(err);

@@ -71,14 +71,15 @@ export async function getAnalytics(range = '7d') {
  */
 export async function exportReport(format = 'csv', filters = {}) {
   try {
-    const blob = await apiRequest(`/analytics/export?format=${format}`);
+    const range = typeof filters === 'string' ? filters : (filters?.range || '7d');
+    const blob = await apiRequest(`/analytics/export?format=${format}&range=${range}`);
 
     // If running in browser, trigger file download
     if (typeof window !== 'undefined' && window.URL && blob instanceof Blob) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `FERMS_Report_${new Date().toISOString().split('T')[0]}.${format}`;
+      a.download = `FERMS_Incident_Report_${range}_${new Date().toISOString().split('T')[0]}.${format}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
